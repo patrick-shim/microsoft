@@ -8,6 +8,10 @@ Insider Risk, eDiscovery).
 
 > **New here?** Read the [root README](../README.md) and [`../a365-agent-slim`](../a365-agent-slim/README.md)
 > first — this project assumes you know the slim demo.
+>
+> **Docs & packages:** the [root README → References](../README.md#references--further-reading) lists the
+> official Microsoft Learn docs and packages for Agent Framework, Agent 365, and **Microsoft Purview**
+> (DLP, DSPM for AI, IRM, `agent-framework-purview`).
 
 ---
 

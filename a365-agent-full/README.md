@@ -5,12 +5,18 @@ chat with it in **Microsoft Teams** (and it shows up in **Microsoft Copilot**), 
 send your email, read Teams messages, and open SharePoint/OneDrive files** on your behalf, and
 every action it takes is **recorded** so admins can audit it.
 
-It is the grown-up sibling of [`../a365-agent-slim`](../a365-agent-slim). The slim demo runs one
-Python script on your laptop and never touches Teams. This one runs as a **container in Azure**,
-speaks the real Teams protocol, and is onboarded to Microsoft 365 like any first-class app.
+It is the grown-up sibling of [`../a365-agent-slim`](../a365-agent-slim) (a local script) and
+[`../a365-agent-purview`](../a365-agent-purview) (the slim agent + Purview DLP). The slim demos run
+one Python script on your laptop and never touch Teams. This one runs as a **container in Azure**,
+speaks the real Teams protocol, and is onboarded to Microsoft 365 like any first-class app. See the
+[root README](../README.md) for how all three compare.
 
 > **Never heard of any of this?** Jump to [§1 Concepts in plain English](#1-concepts-in-plain-english).
 > Just want to stand it up? Jump to [§7 Re-provision from scratch](#7-re-provision-from-scratch-copypaste).
+>
+> **Docs & packages:** the [root README → References](../README.md#references--further-reading) lists
+> the official Microsoft Learn docs, source, and packages for Agent 365, the Agent Framework, Azure
+> Container Apps, Entra, and Foundry.
 
 ---
 

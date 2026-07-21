@@ -1,9 +1,9 @@
-# Agent 365 — local demo: an AI agent that chats, uses Microsoft 365 tools, and is observable
+# a365-agent-slim — local demo: an AI agent that chats, uses Microsoft 365 tools, and is observable
 
 This folder is a small, self-contained demo of a **Microsoft Agent 365** agent running on
 your own machine. In one terminal you chat with an AI agent that can:
 
-1. **Answer questions** using an Azure OpenAI model (GPT-4.1).
+1. **Answer questions** using an Azure OpenAI model (gpt-5).
 2. **Act on your Microsoft 365 mailbox** — read/search/draft email — through "WorkIQ" tools.
 3. **Report everything it does** to Agent 365 as **observability** activities you can see in
    the Microsoft admin center and Microsoft Defender.
@@ -14,12 +14,16 @@ thing is one Python script you can demo live.
 > **New to Microsoft / Agent 365?** Start with **[§1 Concepts](#1-concepts-a-5-minute-primer)** —
 > it explains every term used below (Entra, tenant, Blueprint, MCP, observability, …).
 >
-> **Two samples in this repo** — see the [root README](../README.md) for how they compare. When you're
-> ready for a *real* agent that runs inside Microsoft Teams and Copilot (deployed to Azure), graduate
-> to [`../a365-agent-full`](../a365-agent-full/README.md).
+> **Three samples in this repo** — see the [root README](../README.md) for how they compare. Add
+> Microsoft Purview DLP to this same agent with [`../a365-agent-purview`](../a365-agent-purview/README.md),
+> or graduate to a *real* agent inside Microsoft Teams and Copilot (deployed to Azure) with
+> [`../a365-agent-full`](../a365-agent-full/README.md).
 >
 > **Configuration:** copy the fully-annotated [`.env.sample`](.env.sample) to `.env` and fill it in
 > (every variable is commented with where it comes from and what reads it).
+>
+> **Docs & packages:** the [root README → References](../README.md#references--further-reading) lists
+> the official Microsoft Learn docs, source, and packages for everything used here.
 
 ---
 
@@ -51,7 +55,7 @@ and the rest of this README will make sense.
 | **Microsoft Agent 365 (A365)** | Microsoft's platform for building and governing AI **agents** inside Microsoft 365. Agents get their own identity, scoped permissions, tools, and observability. |
 | **Blueprint** | The agent's **app registration in Entra** — its identity template plus a client secret and the permissions it may use. Created for you by the `a365` CLI. |
 | **Agent identity ("Entra agent ID" / agentic app id)** | A GUID that uniquely identifies *this agent*. Everything the agent does is attributed to this id. |
-| **Azure OpenAI** | Microsoft's hosted version of OpenAI models (GPT-4.1 here), reachable at an HTTPS endpoint in your tenant. |
+| **Azure OpenAI** | Microsoft's hosted version of OpenAI models (gpt-5 here), reachable at an HTTPS endpoint in your tenant. |
 | **MCP (Model Context Protocol)** | An open standard for giving an LLM **tools** it can call. A "tool" is just a function the model can invoke (e.g. "search my mail"). |
 | **WorkIQ tools** | Microsoft's ready-made MCP tool servers that expose Microsoft 365 data — Mail, Calendar, Teams, SharePoint, etc. This demo uses the **Mail** server. |
 | **OpenTelemetry (OTel)** | The industry-standard way to record what software does as **spans** (timed, structured events). "Observability" = collecting and viewing those spans. |
@@ -77,7 +81,7 @@ You type a message. Under the hood, each turn does four things:
    │                                                              │
    │  2. Open a baggage scope tagging spans with the agent id     │
    │                                                              │
-   │  3. agent.run(message) ──────────────────────────────────────►  Azure OpenAI (GPT-4.1)
+   │  3. agent.run(message) ──────────────────────────────────────►  Azure OpenAI (gpt-5)
    │       the model decides to call a Mail tool ─────────────────►  WorkIQ Mail MCP server
    │       gets the answer, writes a reply                        │  (agent365.svc.cloud.microsoft)
    │                                                              │
@@ -163,23 +167,23 @@ To onboard an agent, your signed-in account needs:
 
 "Onboarding" = registering the agent with Agent 365. This is a **one-time** step that creates
 the agent's identity and permissions in Entra and writes the resulting IDs into your `.env`
-so the demo can use them. (This folder's agent, `agent-obs-demo`, is already onboarded — the
+so the demo can use them. (This folder's agent, `a365-slim-demo`, is already onboarded — the
 steps below show how it was done and how to do a fresh one.)
 
 ### 4.1 Preview first (a dry run — nothing is created)
 
 ```powershell
-a365 setup all --agent-name agent-obs-demo --authmode obo --dry-run
+a365 setup all --agent-name a365-slim-demo --authmode obo --dry-run
 ```
 ```
 The following steps would be performed.
   1. Prerequisites                validate (Azure CLI, PowerShell modules)
-  2. Blueprint                    create (multi-tenant): agent-obs-demo Blueprint
+  2. Blueprint                    create (multi-tenant): a365-slim-demo Blueprint
                                   + service principal + client secret + FIC + managed identity
   3. Inheritable Permissions      Microsoft Graph, Agent 365 Tools, Observability API, Power Platform API
   4. Blueprint Permission Grants  delegated grants for the signed-in principal
-  5. Agent identity               create: agent-obs-demo Identity
-  6. Agent Registration           register: agent-obs-demo Agent
+  5. Agent identity               create: a365-slim-demo Identity
+  6. Agent Registration           register: a365-slim-demo Agent
   7. Messaging endpoint           skipped (non-M365 agent)
   8. Project settings             write to .env
 ```
@@ -192,7 +196,7 @@ The following steps would be performed.
 ### 4.2 Apply — create the Blueprint, identity, and permissions
 
 ```powershell
-a365 setup all --agent-name agent-obs-demo --authmode obo
+a365 setup all --agent-name a365-slim-demo --authmode obo
 ```
 
 While it runs:
@@ -205,9 +209,9 @@ While it runs:
 Success ends with a summary:
 ```
 Setup Summary
-  2. Blueprint                    created  'agent-obs-demo Blueprint' (ID: d06067f7-…)
-  5. Agent identity               created  'agent-obs-demo Identity'  (ID: d435d1c6-…)
-  6. Agent Registration           registered 'agent-obs-demo Agent'   (ID: T_668bb499-…)
+  2. Blueprint                    created  'a365-slim-demo Blueprint' (ID: d06067f7-…)
+  5. Agent identity               created  'a365-slim-demo Identity'  (ID: d435d1c6-…)
+  6. Agent Registration           registered 'a365-slim-demo Agent'   (ID: T_668bb499-…)
   8. Project settings             written
 Setup completed successfully
 ```
@@ -241,9 +245,9 @@ agent id). See §5.
 
 ```powershell
 a365 query-entra --help                                        # inspect scopes/permissions/consent
-a365 setup blueprint --agent-name agent-obs-demo --show-secret # reprint the client secret
+a365 setup blueprint --agent-name a365-slim-demo --show-secret # reprint the client secret
 a365 develop list-available                                    # list WorkIQ tool servers you can add
-a365 cleanup --agent-name agent-obs-demo                       # tear everything down
+a365 cleanup --agent-name a365-slim-demo                       # tear everything down
 ```
 
 ---
@@ -257,7 +261,7 @@ yourself. Here's every key the demo reads:
 | Key | What it is | Set by |
 |---|---|---|
 | `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI HTTPS endpoint | you |
-| `AZURE_OPENAI_DEPLOYMENT` | The model deployment name (e.g. `gpt-4.1`) | you |
+| `AZURE_OPENAI_DEPLOYMENT` | The model deployment name (e.g. `gpt-5`) | you |
 | `AZURE_OPENAI_API_VERSION` | API version — use `preview` for the `/openai/v1` endpoint | you |
 | `AGENT365OBSERVABILITY__TENANTID` | Your tenant id | `a365 setup all` |
 | `AGENT365OBSERVABILITY__CLIENTID` | Blueprint (client) id — used to mint the observability token | `a365 setup all` |
@@ -300,7 +304,7 @@ On start you'll see:
 ```
 🔭 Observability ON — activities export to A365 as agent d435d1c6-…
 🔧 Mail tools enabled (WorkIQ mcp_MailTools).
-🤖 agent-obs-demo Identity ready (Azure OpenAI: gpt-4.1).
+🤖 a365-slim-demo Identity ready (Azure OpenAI: gpt-5).
 ```
 
 Good things to ask:
@@ -356,7 +360,7 @@ Two implementation details worth knowing (both commented in the code):
 Each turn that prints `📡 activity exported to A365` sends spans to the Agent 365 backend.
 View them:
 
-- **Microsoft 365 admin center** → **Agents → All agents → `agent-obs-demo` → Activity**.
+- **Microsoft 365 admin center** → **Agents → All agents → `a365-slim-demo` → Activity**.
 - **Microsoft Defender / Purview** → **Advanced Hunting → `CloudAppEvents`**, filter
   `AgentId == "<AGENT365_ACTIVITY_AGENT_ID from .env>"`.
 
