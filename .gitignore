@@ -2,7 +2,7 @@
 # Defense-in-depth: each project also ignores these, but the root repo catches
 # them everywhere (e.g. a365-agent-full/backend/.env holds the blueprint secret).
 **/.env
-!**/.env.example
+!**/.env.sample
 **/a365.generated.config.json
 **/*.local.json
 

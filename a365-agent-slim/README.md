@@ -18,7 +18,7 @@ thing is one Python script you can demo live.
 > ready for a *real* agent that runs inside Microsoft Teams and Copilot (deployed to Azure), graduate
 > to [`../a365-agent-full`](../a365-agent-full/README.md).
 >
-> **Configuration:** copy the fully-annotated [`.env.example`](.env.example) to `.env` and fill it in
+> **Configuration:** copy the fully-annotated [`.env.sample`](.env.sample) to `.env` and fill it in
 > (every variable is commented with where it comes from and what reads it).
 
 ---

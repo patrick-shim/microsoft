@@ -1,9 +1,9 @@
 # ── Secrets / generated state (never commit) ─────────────────────────────────
 .env
 .env.*
-!.env.example
+!.env.sample
 **/.env
-!**/.env.example
+!**/.env.sample
 a365.generated.config.json
 **/a365.generated.config.json
 *.local.json

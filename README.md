@@ -60,7 +60,7 @@ Both samples need:
 The full sample additionally needs an **Azure subscription** (to run the container) and, to go live
 in Teams, a tenant enrolled in **Frontier** with an available **agent license**.
 
-Each sample ships a fully-commented **`.env.example`** — copy it to `.env` and fill it in. Every
+Each sample ships a fully-commented **`.env.sample`** — copy it to `.env` and fill it in. Every
 variable is annotated with where it comes from (you / the `a365` CLI / Azure OpenAI) and what reads it.
 
 ---
@@ -73,7 +73,7 @@ microsoft/
 ├─ a365-agent-slim/         ← the local demo (one script)
 │  ├─ agent.py              ← chat + observability
 │  ├─ refresh-mail-token.ps1← fetch a WorkIQ Mail token into .env
-│  ├─ .env.example          ← annotated config template
+│  ├─ .env.sample          ← annotated config template
 │  └─ README.md
 └─ a365-agent-full/         ← the real Teams AI Teammate
    ├─ backend/              ← the agent (runs in a container)

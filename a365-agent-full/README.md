@@ -202,7 +202,7 @@ id/secret/tenant). If your container logs say `Auth: Anonymous`, that's why. Set
 
 ## 6. Configuration reference (`.env`)
 
-Copy `backend/.env.example` → `backend/.env` and fill it. Values marked *(from setup)* come from
+Copy `backend/.env.sample` → `backend/.env` and fill it. Values marked *(from setup)* come from
 `a365.generated.config.json` after `a365 setup all`; get the secret with
 `a365 setup blueprint --show-secret`.
 
@@ -282,7 +282,7 @@ Copy-Item ToolingManifest.json backend\ToolingManifest.json   # the container im
 
 ### 5. Fill `backend/.env`
 
-Copy `backend/.env.example` → `backend/.env`, then set the Foundry values (endpoint, `gpt-5`,
+Copy `backend/.env.sample` → `backend/.env`, then set the Foundry values (endpoint, `gpt-5`,
 api-version, key) and the blueprint values from `a365.generated.config.json` +
 `a365 setup blueprint --show-secret` (see [§6](#6-configuration-reference-env)). Set **both** the
 `CONNECTIONS__…` *and* the top-level `CLIENT_ID/TENANT_ID/CLIENT_SECRET`.
@@ -324,7 +324,7 @@ You're live. ✅
 
 ```powershell
 cd backend
-copy .env.example .env      # set AZURE_OPENAI_* and ENABLE_A365_OBSERVABILITY_EXPORTER=false
+copy .env.sample .env      # set AZURE_OPENAI_* and ENABLE_A365_OBSERVABILITY_EXPORTER=false
 uv sync
 uv run python start_with_generic_host.py
 # → "Listening on http://0.0.0.0:3978/api/messages  (health: /api/health)"
