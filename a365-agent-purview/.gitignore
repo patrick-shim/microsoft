@@ -30,5 +30,8 @@ a365.generated.config.json
 .a365setup-unknown-agent
 .a365-smoketest.log
 
+# Purview interactive-auth account record (account pointer for silent re-sign-in; per machine/user)
+.purview-auth-record.json
+
 # Dev tool directories
 /devTools/

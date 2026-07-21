@@ -23,3 +23,15 @@
 # ── OS / editor ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Obsidian vault (personal notes overlaid on this repo — never commit) ─────
+# The repo folder doubles as an Obsidian vault; ignore all of its artifacts.
+# NOTE: .gitignore has no inline comments — keep each comment on its own line.
+**/.obsidian/
+**/.trash/
+*.canvas
+# auto-generated Obsidian knowledge base
+wiki/
+# daily notes (YYYY-MM-DD.md), at root and anywhere
+20[0-9][0-9]-[0-1][0-9]-[0-3][0-9].md
+**/20[0-9][0-9]-[0-1][0-9]-[0-3][0-9].md

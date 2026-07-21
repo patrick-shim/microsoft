@@ -63,7 +63,11 @@ from agent_framework.openai import OpenAIChatClient
 # agent-framework-purview evaluates every prompt AND response against the tenant's Purview
 # DLP policies (via Microsoft Graph dataSecurityAndGovernance) and blocks violations inline.
 from agent_framework.microsoft import PurviewPolicyMiddleware, PurviewSettings
-from azure.identity import InteractiveBrowserCredential, TokenCachePersistenceOptions
+from azure.identity import (
+    AuthenticationRecord,
+    InteractiveBrowserCredential,
+    TokenCachePersistenceOptions,
+)
 
 # --- Agent 365 observability (OpenTelemetry distro + baggage propagation) ------
 from microsoft.opentelemetry import use_microsoft_opentelemetry
@@ -82,6 +86,15 @@ DEFAULT_AGENT_ID = "d435d1c6-82a6-4773-9d3c-862e43f9c04e"
 # OAuth scopes for the S2S FMI token chain that authenticates the observability exporter.
 FMI_SCOPE = "api://AzureADTokenExchange/.default"
 OBSERVABILITY_SCOPE = "api://9b975845-388f-4429-889e-eab1ef63949c/.default"
+
+# The delegated Graph scope the Purview middleware acquires (see get_purview_scopes()).
+PURVIEW_GRAPH_SCOPE = "https://graph.microsoft.com/.default"
+# Where the one-time Purview sign-in's AuthenticationRecord is cached. This is an ACCOUNT
+# POINTER (home account id / username / tenant), NOT a token — the tokens live in the OS
+# credential store. Persisting it lets subsequent runs authenticate silently (no popup).
+PURVIEW_AUTH_RECORD_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".purview-auth-record.json"
+)
 
 AGENT_PROMPT = (
     "You are a helpful Microsoft 365 assistant with direct access to the user's mailbox via the "
@@ -276,6 +289,47 @@ class PromptOnlyPurviewMiddleware(PurviewPolicyMiddleware):
         self._processor.process_messages = _prompt_only  # type: ignore[method-assign]
 
 
+def _build_purview_credential(cfg: Config) -> InteractiveBrowserCredential:
+    """Build an InteractiveBrowserCredential that signs in ONCE, then stays silent.
+
+    Silent reuse across process restarts needs BOTH pieces:
+      1. a persistent token cache (TokenCachePersistenceOptions) — holds the refresh token
+         in the OS credential store (Windows DPAPI), and
+      2. an AuthenticationRecord — tells the credential WHICH cached account to look up.
+         Without it, azure-identity can't match the cache and pops the browser every run.
+
+    We persist the record to disk on the first sign-in and load it on every later run, so
+    only the very first invocation shows a browser. Delete `.purview-auth-record.json` (or
+    clear the 'a365-purview' cache) to force a fresh sign-in.
+    """
+    record: AuthenticationRecord | None = None
+    if os.path.exists(PURVIEW_AUTH_RECORD_PATH):
+        try:
+            with open(PURVIEW_AUTH_RECORD_PATH, encoding="utf-8") as f:
+                record = AuthenticationRecord.deserialize(f.read())
+        except Exception as e:  # corrupt/old record — fall back to a fresh sign-in
+            print(f"⚠️  Ignoring unreadable Purview auth record ({e}); will sign in again.")
+            record = None
+
+    credential = InteractiveBrowserCredential(
+        client_id=cfg.purview_client_app_id,
+        cache_persistence_options=TokenCachePersistenceOptions(name="a365-purview"),
+        authentication_record=record,
+    )
+
+    if record is None:
+        # First run (or the record was lost): perform the one interactive sign-in now and
+        # persist the resulting account record so future runs are silent.
+        record = credential.authenticate(scopes=[PURVIEW_GRAPH_SCOPE])
+        try:
+            with open(PURVIEW_AUTH_RECORD_PATH, "w", encoding="utf-8") as f:
+                f.write(record.serialize())
+        except Exception as e:
+            print(f"⚠️  Could not persist Purview auth record ({e}); you may be prompted again.")
+
+    return credential
+
+
 def _build_purview_middleware(cfg: Config) -> list:
     """Create the Purview DLP policy middleware, or [] when Purview isn't configured.
 
@@ -299,14 +353,11 @@ def _build_purview_middleware(cfg: Config) -> list:
         ignore_exceptions=True,
         ignore_payment_required=True,
     )
-    # Persist the token in the OS credential store so the browser sign-in happens ONCE — after that
-    # the cached refresh token is reused silently for weeks (no popup on subsequent runs). For a
-    # fully headless / no-popup deployment, swap this for CertificateCredential (app-only) and pass
-    # user_id explicitly on each turn — see README.
-    credential = InteractiveBrowserCredential(
-        client_id=cfg.purview_client_app_id,
-        cache_persistence_options=TokenCachePersistenceOptions(name="a365-purview"),
-    )
+    # Sign in ONCE (browser), then reuse the cached token silently on every later run — this
+    # needs both a persistent cache AND a saved AuthenticationRecord (see the builder). For a
+    # fully headless / no-popup deployment, swap this for CertificateCredential (app-only) and
+    # pass user_id explicitly on each turn — see README.
+    credential = _build_purview_credential(cfg)
     print(f"🛡️  Purview DLP ON (app '{cfg.purview_app_name}') — prompts are policy-checked. "
           "A browser sign-in opens on the FIRST run only (token is then cached).")
     # PromptOnly: the Application enforcement plane only supports blocking prompts (uploadText);
