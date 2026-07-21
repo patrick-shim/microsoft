@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/vdevPreview/MicrosoftTeams.schema.json",
-  "id": "d12212a3-f818-446c-ae36-e85d2244c9cb",
+  "id": "f337cc18-ef98-4525-92b0-d98c184d5b11",
   "name": {
     "short": "a365-full-demo Blueprint",
     "full": "a365-full-demo Blueprint"

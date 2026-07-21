@@ -28,8 +28,12 @@ $image = "$AcrName.azurecr.io/$AppName`:$ImageTag"
 
 Write-Host "==> Ensuring the containerapp extension is present" -ForegroundColor Cyan
 az extension add --name containerapp --upgrade --only-show-errors | Out-Null
-az provider register --namespace Microsoft.App --only-show-errors | Out-Null
-az provider register --namespace Microsoft.OperationalInsights --only-show-errors | Out-Null
+# Register required resource providers and WAIT — a fresh subscription has none of these,
+# and creation fails if they aren't Registered yet (registration is async).
+foreach ($ns in @("Microsoft.App", "Microsoft.OperationalInsights", "Microsoft.ContainerRegistry", "Microsoft.Network", "Microsoft.ContainerInstance")) {
+    Write-Host "==> Registering resource provider $ns"
+    az provider register --namespace $ns --wait --only-show-errors | Out-Null
+}
 
 Write-Host "==> Resource group $ResourceGroup ($Location)" -ForegroundColor Cyan
 az group create --name $ResourceGroup --location $Location --only-show-errors | Out-Null
@@ -42,7 +46,10 @@ Write-Host "==> Building image in ACR from $BackendPath/Dockerfile" -ForegroundC
 az acr build --registry $AcrName --image "$AppName`:$ImageTag" $BackendPath
 
 Write-Host "==> Container Apps environment $EnvName" -ForegroundColor Cyan
-az containerapp env create --name $EnvName --resource-group $ResourceGroup --location $Location --only-show-errors | Out-Null
+# --logs-destination none avoids the auto-created Log Analytics workspace (a fragile
+# dependency on fresh subscriptions). Live logs still work via `az containerapp logs show`.
+az containerapp env create --name $EnvName --resource-group $ResourceGroup --location $Location `
+    --logs-destination none --only-show-errors | Out-Null
 
 # ── Parse backend/.env into non-secret env vars and secrets ──────────────────
 $envFile = Join-Path $BackendPath ".env"
