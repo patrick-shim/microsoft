@@ -51,8 +51,8 @@ Write-Host "==> Container Apps environment $EnvName" -ForegroundColor Cyan
 az containerapp env create --name $EnvName --resource-group $ResourceGroup --location $Location `
     --logs-destination none --only-show-errors | Out-Null
 
-# ── Parse backend/.env into non-secret env vars and secrets ──────────────────
-$envFile = Join-Path $BackendPath ".env"
+# ── Parse the project-root .env (a365-agent-full/.env) into env vars and secrets ──────
+$envFile = Join-Path (Split-Path $BackendPath -Parent) ".env"
 if (-not (Test-Path $envFile)) { throw "Missing $envFile — copy .env.example to .env and fill it first." }
 
 $secretKeys = @(

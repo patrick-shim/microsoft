@@ -14,7 +14,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-$envFile = Join-Path $BackendPath ".env"
+$envFile = Join-Path (Split-Path $BackendPath -Parent) ".env"
 if (-not (Test-Path $envFile)) { throw "Missing $envFile." }
 
 $secretKeys = @(

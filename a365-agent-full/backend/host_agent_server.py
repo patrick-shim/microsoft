@@ -65,7 +65,11 @@ ms_agents_logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 logging.getLogger("microsoft_agents_a365.observability").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+# Load THIS project's own .env (a365-agent-full/.env, the parent of backend/) by an EXPLICIT
+# absolute path — never depends on the working directory, never picks up another project's .env.
+# (In the container there is no .env; config comes from Container Apps env vars — load_dotenv on a
+# missing file is a harmless no-op.)
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 agents_sdk_config = load_configuration_from_env(environ)
 
 
