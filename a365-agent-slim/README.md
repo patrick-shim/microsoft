@@ -376,6 +376,11 @@ View them:
 - **`Could not enable observability` / token errors** → check `.env` has the Blueprint
   `CLIENTID` / `CLIENTSECRET` / `TENANTID` and that `AGENT365_ACTIVITY_AGENT_ID` is the
   **agentic app id** (not the Blueprint id).
+- **Is it actually exporting?** The `📡 activity exported` line prints unconditionally and isn't
+  proof. Set `A365_OBS_DEBUG=1` before running to see the exporter's real outcome — the export URL
+  and **HTTP status** (`200` = shipped; `401/403` = the agent lacks the Observability `OtelWrite`
+  grant; `No eligible genAI spans` = nothing was produced to export). The admin center then lags
+  15–90 min behind a successful export.
 - **`Missing AZURE_OPENAI config`** → fill `AZURE_OPENAI_ENDPOINT` / `_DEPLOYMENT` /
   `_API_VERSION` in `.env`, and make sure you've run `az login`.
 - **A tool returns "Response size exceeds maximum"** → the mailbox is large and the model

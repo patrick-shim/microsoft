@@ -44,6 +44,14 @@ for _v in ("APPLICATIONINSIGHTS_CONNECTION_STRING", "APPLICATIONINSIGHTS_CONFIGU
     os.environ.pop(_v, None)
 logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.CRITICAL)
 
+# Diagnostics: set A365_OBS_DEBUG=1 to see EXACTLY what the A365 observability exporter does
+# each turn — whether it found eligible spans, the export URL, and the HTTP status (200 = shipped,
+# 401/403 = the agent lacks the Observability OtelWrite grant, "No eligible genAI spans" = nothing
+# was produced to export). Off by default so normal runs stay quiet.
+if os.getenv("A365_OBS_DEBUG"):
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("microsoft.opentelemetry").setLevel(logging.DEBUG)
+
 # --- Third party --------------------------------------------------------------
 import httpx
 import msal
