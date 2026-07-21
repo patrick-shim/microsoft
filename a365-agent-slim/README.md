@@ -13,6 +13,13 @@ thing is one Python script you can demo live.
 
 > **New to Microsoft / Agent 365?** Start with **[§1 Concepts](#1-concepts-a-5-minute-primer)** —
 > it explains every term used below (Entra, tenant, Blueprint, MCP, observability, …).
+>
+> **Two samples in this repo** — see the [root README](../README.md) for how they compare. When you're
+> ready for a *real* agent that runs inside Microsoft Teams and Copilot (deployed to Azure), graduate
+> to [`../a365-agent-full`](../a365-agent-full/README.md).
+>
+> **Configuration:** copy the fully-annotated [`.env.example`](.env.example) to `.env` and fill it in
+> (every variable is commented with where it comes from and what reads it).
 
 ---
 
