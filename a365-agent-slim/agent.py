@@ -30,8 +30,19 @@ import argparse
 import asyncio
 import os
 import sys
+import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
+
+# --- Silence the Azure Monitor / Application Insights exporter -----------------
+# This demo ships telemetry to Agent 365, NOT to Application Insights. The OpenTelemetry
+# distro (or an ambient APPLICATIONINSIGHTS_* env var that some IDEs / debuggers inject)
+# can still spin up an Azure Monitor exporter, which then retries against an unreachable
+# App Insights host and spams the console with "getaddrinfo failed" warnings. Drop the
+# trigger env vars BEFORE any OpenTelemetry import, and quiet the exporter's logger.
+for _v in ("APPLICATIONINSIGHTS_CONNECTION_STRING", "APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"):
+    os.environ.pop(_v, None)
+logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.CRITICAL)
 
 # --- Third party --------------------------------------------------------------
 import httpx

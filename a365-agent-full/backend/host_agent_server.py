@@ -18,6 +18,14 @@ import os
 import socket
 from os import environ
 
+# Silence the Azure Monitor / Application Insights exporter — this agent ships telemetry to Agent 365,
+# not to App Insights. An ambient APPLICATIONINSIGHTS_* env var can still spin up an Azure Monitor
+# exporter that retries against an unreachable host and spams the logs. Drop the triggers + quiet the
+# exporter's logger BEFORE any OpenTelemetry import below.
+for _v in ("APPLICATIONINSIGHTS_CONNECTION_STRING", "APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"):
+    os.environ.pop(_v, None)
+logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.CRITICAL)
+
 from aiohttp.web import Application, Request, Response, json_response, run_app
 from aiohttp.web_middlewares import middleware as web_middleware
 from dotenv import load_dotenv
