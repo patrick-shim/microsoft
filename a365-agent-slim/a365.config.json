@@ -1,0 +1,9 @@
+{
+  "tenantId": "0fe87165-87de-443f-b6d6-6471bae991ea",
+  "clientAppId": "4b79e1cf-1100-4ac8-b890-7ddeb317a9bb",
+  "agentIdentityDisplayName": "agent-obs-demo Identity",
+  "agentBlueprintDisplayName": "agent-obs-demo Blueprint",
+  "agentDescription": "agent-obs-demo",
+  "aiTeammate": false,
+  "useBlueprint": true
+}

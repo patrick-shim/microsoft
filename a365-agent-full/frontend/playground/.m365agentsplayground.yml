@@ -1,0 +1,14 @@
+# AgentsPlayground config for LOCAL agentic-auth testing.
+# Fill the ids from backend/a365.generated.config.json after `a365 setup all`:
+#   bot.id          <- agentBlueprintId (the bot/app id)
+#   bot.agenticAppId<- agentBlueprintId
+#   bot.agenticUserId <- the Agentic User object id (from the instance, once approved)
+#
+# Launch:  agentsplayground   (then point it at http://localhost:3978/api/messages)
+# Docs: https://learn.microsoft.com/en-us/microsoft-agent-365/developer/testing
+bot:
+  id: "<agentBlueprintId>"
+  agenticAppId: "<agentBlueprintId>"
+  agenticUserId: "<agenticUserObjectId>"
+  role: agenticUser
+endpoint: http://localhost:3978/api/messages

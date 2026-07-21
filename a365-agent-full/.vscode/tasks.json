@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    { "id": "endpoint", "type": "promptString", "description": "Messaging endpoint (https://<fqdn>/api/messages)" }
+  ],
+  "tasks": [
+    {
+      "label": "A365: Run Agent (local)",
+      "type": "shell",
+      "command": "uv run python start_with_generic_host.py",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "A365: Setup All (register blueprint)",
+      "type": "shell",
+      "command": "a365 setup all --agent-name a365-full-demo --aiteammate --m365",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "A365: Add WorkIQ tools",
+      "type": "shell",
+      "command": "a365 develop add-mcp-servers mcp_MailTools mcp_TeamsTools mcp_SharePointTools mcp_OneDriveTools",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "A365: Publish (manifest.zip)",
+      "type": "shell",
+      "command": "a365 publish",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "A365: Update endpoint",
+      "type": "shell",
+      "command": "pwsh ${workspaceFolder}/deploy/set-endpoint.ps1 -Endpoint ${input:endpoint}",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "A365: Open Dev Portal",
+      "type": "shell",
+      "command": "pwsh -NoProfile -Command \"$c = Get-Content backend/a365.generated.config.json | ConvertFrom-Json; Start-Process ('https://dev.teams.microsoft.com/tools/agent-blueprint/' + $c.agentBlueprintId + '/configuration')\"",
+      "problemMatcher": []
+    }
+  ]
+}

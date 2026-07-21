@@ -1,0 +1,9 @@
+{
+  "tenantId": "0fe87165-87de-443f-b6d6-6471bae991ea",
+  "clientAppId": "4b79e1cf-1100-4ac8-b890-7ddeb317a9bb",
+  "agentIdentityDisplayName": "a365-full-demo Identity",
+  "agentBlueprintDisplayName": "a365-full-demo Blueprint",
+  "agentDescription": "Microsoft 365 AI teammate demo (Agent Framework + WorkIQ + observability)",
+  "aiTeammate": true,
+  "useBlueprint": true
+}

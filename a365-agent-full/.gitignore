@@ -1,0 +1,28 @@
+# ── Secrets / generated state (never commit) ─────────────────────────────────
+.env
+.env.*
+!.env.example
+**/.env
+!**/.env.example
+a365.generated.config.json
+**/a365.generated.config.json
+*.local.json
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# ── Teams / publish artifacts ────────────────────────────────────────────────
+manifest.zip
+appPackage.zip
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+.DS_Store

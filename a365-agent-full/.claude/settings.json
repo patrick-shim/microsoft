@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(a365 *)",
+      "Bash(az *)",
+      "Bash(devtunnel *)",
+      "Bash(docker *)",
+      "Bash(uv *)",
+      "Bash(pip *)",
+      "Bash(pip3 *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(agentsplayground *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(az account show)",
+      "Bash(az containerapp show *)",
+      "Bash(az containerapp logs *)",
+      "Bash(az webapp config appsettings list *)"
+    ]
+  }
+}

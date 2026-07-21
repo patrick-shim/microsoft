@@ -1,0 +1,25 @@
+# ── Secrets / generated state — NEVER commit ────────────────────────────────
+# Defense-in-depth: each project also ignores these, but the root repo catches
+# them everywhere (e.g. a365-agent-full/backend/.env holds the blueprint secret).
+**/.env
+!**/.env.example
+**/a365.generated.config.json
+**/*.local.json
+
+# ── Python ──────────────────────────────────────────────────────────────────
+**/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+**/*.egg-info/
+
+# ── Publish / build artifacts ───────────────────────────────────────────────
+**/manifest.zip
+**/appPackage.zip
+**/dist/
+**/build/
+
+# ── OS / editor ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
