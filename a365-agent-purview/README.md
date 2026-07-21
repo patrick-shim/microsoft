@@ -1,0 +1,177 @@
+# a365-agent-purview — the slim demo + Microsoft Purview DLP
+
+This is [`../a365-agent-slim`](../a365-agent-slim) with **Microsoft Purview Data Loss Prevention**
+added. Same local agent (Azure OpenAI chat, WorkIQ Mail, Agent 365 observability), but every
+**prompt** is now evaluated against your tenant's Purview DLP policies and **blocked inline** when it
+contains sensitive data — and each interaction is logged in Purview (Audit, Communication Compliance,
+Insider Risk, eDiscovery).
+
+> **New here?** Read the [root README](../README.md) and [`../a365-agent-slim`](../a365-agent-slim/README.md)
+> first — this project assumes you know the slim demo.
+
+---
+
+## What it does
+
+```
+        You: "My resident registration number is 900101-1234567."
+                          │
+                          ▼   PROMPT evaluated by Purview
+        ┌───────────────────────────────────────────────┐
+        │  PurviewPolicyMiddleware (agent_framework)     │
+        │    → Microsoft Graph processContent            │──► Purview DLP (your tenant's policies)
+        └───────────────────────────────────────────────┘
+                          │
+             blocked? ────┼── yes ──►  "🛑 blocked by a Purview DLP policy"  (model never sees it)
+                          │
+                          ▼   no
+                    Azure OpenAI (gpt-5) ──► Agent: "<the answer>"
+```
+
+The check is an Agent Framework **middleware** (`agent-framework-purview`, imports as
+`agent_framework.microsoft`). The wiring is one call in [`agent.py`](agent.py) —
+`_build_purview_middleware()` builds a `PurviewPolicyMiddleware` and passes it to
+`client.as_agent(..., middleware=[...])`.
+
+> **Prompt vs response:** the middleware evaluates both, but on the **Application** enforcement plane
+> (custom apps) Purview currently supports **blocking prompts** (`UploadText`) only — response
+> blocking (`DownloadText`) isn't available yet, so this demo is **prompt-level DLP**.
+
+---
+
+## Prerequisites
+
+- Everything the slim demo needs (Python 3.11+, `uv`, `az login`, an Azure OpenAI/Foundry deployment).
+- **Microsoft 365 E5** + **pay-as-you-go billing** linked in Purview — these AI data-security APIs are
+  **metered**; without billing you get HTTP **402** (the agent then degrades gracefully and doesn't block).
+- An **Entra app registration** for Purview (its client id → `PURVIEW_CLIENT_APP_ID`) with delegated
+  Graph permissions (admin-consented).
+- A **DLP policy** on the **Application** enforcement plane, scoped to that app.
+
+---
+
+## Setup (the exact working flow)
+
+### 1. Register the Purview Entra app + grant Graph permissions
+
+Run in your terminal (creates the app, its SP, and admin-consents the three delegated Graph scopes —
+GUIDs are Microsoft Graph's `ProtectionScopes.Compute.All`, `Content.Process.All`, `ContentActivity.Write`):
+
+```powershell
+@'
+[{ "resourceAppId": "00000003-0000-0000-c000-000000000000",
+   "resourceAccess": [
+     { "id": "98f5a27a-539a-48bc-a597-f78e9e1e76bf", "type": "Scope" },
+     { "id": "7e2467d1-f874-46bb-828e-24cb06b29d3f", "type": "Scope" },
+     { "id": "948caae6-152a-48cd-a746-4844af30e8e9", "type": "Scope" }
+]}]
+'@ | Set-Content -Path perms.json -Encoding UTF8
+
+az ad app create --display-name "a365-purview-dlp" `
+  --public-client-redirect-uris "http://localhost" `
+  --required-resource-accesses "@perms.json" --is-fallback-public-client true | Out-Null
+$appId = az ad app list --display-name "a365-purview-dlp" --query "[0].appId" -o tsv
+az ad sp create --id $appId | Out-Null
+az ad app permission admin-consent --id $appId        # requires Global Admin
+Remove-Item perms.json
+Write-Host "PURVIEW_CLIENT_APP_ID = $appId"            # -> put in .env, and reuse below
+```
+
+### 2. Onboard the app in Purview + set up billing
+
+In the [Purview portal](https://purview.microsoft.com):
+- **Settings → Billing** → set up **pay-as-you-go** (required for custom-app policies).
+- **DSPM for AI** → [Recommendations/Policies](https://purview.microsoft.com/purviewforai/recommendations)
+  → enable **"Secure interactions from enterprise apps (preview)"** → status **On**. This puts your app's
+  prompts/responses in scope for processing.
+
+### 3. Create the DLP policy + rule (Security & Compliance PowerShell)
+
+The standard DLP *location wizard* does **not** cover custom SDK apps — you must use the **Application**
+enforcement plane with the app itself as the location. This is the flow that works:
+
+```powershell
+Connect-IPPSSession -UserPrincipalName <you>@<tenant>.onmicrosoft.com   # opens a sign-in
+
+$myEntraAppId   = $appId          # the a365-purview-dlp client id from step 1
+$myEntraAppName = "a365-purview-dlp"
+# Location = THIS app (LocationType Individual, LocationSource Entra), all users:
+$locations = "[{`"Workload`":`"Applications`",`"Location`":`"$myEntraAppId`",`"LocationDisplayName`":`"$myEntraAppName`",`"LocationSource`":`"Entra`",`"LocationType`":`"Individual`",`"Inclusions`":[{`"Type`":`"Tenant`",`"Identity`":`"All`"}]}]"
+
+New-DlpCompliancePolicy -Name "Block sensitive PII in AI apps" -Mode Enable `
+  -Locations $locations -EnforcementPlanes @("Application")
+
+# Rule: block the PROMPT when it contains any of these SITs (add/remove as you like).
+New-DlpComplianceRule -Name "Block PII - AI" -Policy "Block sensitive PII in AI apps" `
+  -ContentContainsSensitiveInformation @(
+    @{ Name = "Credit Card Number" },
+    @{ Name = "South Korea Resident Registration Number" },
+    @{ Name = "South Korea Passport Number" },
+    @{ Name = "South Korea Driver's License Number" }
+  ) `
+  -RestrictAccess @(@{ setting = "UploadText"; value = "Block" }) `
+  -GenerateAlert $true -NotifyUser @("<you>@<tenant>.onmicrosoft.com")
+```
+
+Gotchas we actually hit (so you don't):
+- `-EnforcementPlanes @("Application")` is **rejected** with the Copilot location GUID — the location must
+  be **your app id** with `LocationType:"Individual"`. ("Application" replaced the deprecated "Entra" plane.)
+- Only **`UploadText`** (prompt) is a valid `-RestrictAccess` action here; `DownloadText` (response) errors.
+- The `Set-`/`Get-DlpComplianceRule` cmdlets vanish when the **IPPS session times out** — just
+  `Connect-IPPSSession` again. To add SITs later: `Set-DlpComplianceRule -Identity "Block PII - AI" -ContentContainsSensitiveInformation @(...)`.
+
+### 4. Configure and run
+
+```powershell
+cd a365-agent-purview
+copy .env.sample .env
+# Fill: AZURE_OPENAI_* (gpt-5), PURVIEW_CLIENT_APP_ID = $appId, and the A365 observability values
+#       (reuse the a365-agent-slim blueprint, or provision your own).
+uv sync --link-mode=copy                 # --link-mode=copy avoids a OneDrive hardlink error
+.venv\Scripts\python.exe agent.py -m "My resident registration number is 900101-1234567."
+```
+
+Start-up shows `🛡️ Purview DLP ON …`. The **first run opens a browser** to sign in to the Purview app;
+after that the token is cached (see below) and it's silent. After policy propagation (a few minutes) a
+prompt containing any configured SIT comes back **🛑 blocked by a Purview DLP policy**; normal prompts
+answer as usual.
+
+---
+
+## Sign-in: once, not every time
+
+`_build_purview_middleware()` uses `InteractiveBrowserCredential` with **token-cache persistence**
+(`TokenCachePersistenceOptions`), so the browser sign-in happens on the **first run only** — the token is
+cached in the Windows Credential Manager and refreshed silently afterward.
+
+**Fully headless (no popup ever):** switch to `CertificateCredential` (app-only) — upload a cert to the
+`a365-purview-dlp` app, grant the **application** versions of the three Graph permissions, and pass
+`user_id` explicitly (set `PURVIEW_DEFAULT_USER_ID`). See the `agent-framework-purview` sample's
+`PURVIEW_USE_CERT_AUTH` path.
+
+---
+
+## Configuration reference (`.env`)
+
+Purview-specific keys (the rest are inherited from the slim demo — see [`.env.sample`](.env.sample)):
+
+| Key | What it is |
+|---|---|
+| `PURVIEW_CLIENT_APP_ID` | Client id of the `a365-purview-dlp` app. **Empty = DLP off** (runs like slim). |
+| `PURVIEW_APP_NAME` | Display name Purview logs under. |
+| `PURVIEW_DEFAULT_USER_ID` | Optional explicit user GUID — only needed for app-only/cert auth. |
+
+The middleware uses `ignore_exceptions=True` / `ignore_payment_required=True`, so if Purview is
+unreachable or unlicensed the agent keeps chatting (logs a warning) instead of failing. Flip those off in
+`_build_purview_middleware()` for strict enforcement.
+
+---
+
+## How this relates to the other samples
+
+- [`a365-agent-slim`](../a365-agent-slim) — the base (chat + Mail + observability).
+- [`a365-agent-full`](../a365-agent-full) — the real Teams AI Teammate. Purview also governs Agent 365 AI
+  Teammates at the platform level; this middleware approach is for **custom / self-hosted** agent code
+  where you want DLP inside your own runtime.
+
+Secrets (`.env`, `a365.generated.config.json`) are gitignored and never committed.

@@ -1,22 +1,21 @@
 # Microsoft Agent 365 — sample agents
 
-This repository contains **two working samples** that show how to build an AI agent on
+This repository contains **three working samples** that show how to build an AI agent on
 **Microsoft Agent 365 (A365)** — Microsoft's platform for AI agents that live inside Microsoft 365
 with their own identity, permissions, tools, and audit trail.
 
-The two samples are the same idea at two levels of ambition, so you can start small and grow:
+The samples are the same core idea at increasing levels of ambition, so you can start small and grow:
 
-| | [`a365-agent-slim/`](a365-agent-slim/) | [`a365-agent-full/`](a365-agent-full/) |
-|---|---|---|
-| **What it is** | A single Python script you run on your laptop | A container deployed to Azure, used inside Teams |
-| **Talks to** | Your terminal (a REPL) | **Microsoft Teams** and **Microsoft Copilot** |
-| **LLM** | Azure OpenAI (Agent Framework) | Azure OpenAI **gpt-5** (Agent Framework) |
-| **M365 tools** | WorkIQ **Mail** | WorkIQ **Mail, Teams, SharePoint, OneDrive** |
-| **Observability** | ✅ exports to A365 | ✅ exports to A365 |
-| **Hosting** | None — bypasses the Bot Framework | Real aiohttp host on **Azure Container Apps** |
-| **Identity used** | mints an observability token via the **FMI chain** | acts as its own **Agentic User** (token exchange) |
-| **Good for** | Understanding the concepts fast; seeing activity in the admin center | A real, demoable Teams AI Teammate; production shape |
-| **Setup effort** | Minutes | End-to-end onboarding (blueprint, deploy, publish, license) |
+| | [`a365-agent-slim/`](a365-agent-slim/) | [`a365-agent-purview/`](a365-agent-purview/) | [`a365-agent-full/`](a365-agent-full/) |
+|---|---|---|---|
+| **What it is** | A single Python script on your laptop | The slim demo **+ Purview DLP** | A container deployed to Azure, used in Teams |
+| **Talks to** | Your terminal (a REPL) | Your terminal (a REPL) | **Microsoft Teams** and **Microsoft Copilot** |
+| **LLM** | Azure OpenAI gpt-5 (Agent Framework) | Azure OpenAI gpt-5 (Agent Framework) | Azure OpenAI **gpt-5** (Agent Framework) |
+| **M365 tools** | WorkIQ **Mail** | WorkIQ **Mail** | WorkIQ **Mail, Teams, SharePoint, OneDrive** |
+| **Observability** | ✅ exports to A365 | ✅ exports to A365 | ✅ exports to A365 |
+| **Extra** | — | **Microsoft Purview DLP** blocks sensitive prompts inline | Real aiohttp host on **Azure Container Apps** |
+| **Good for** | Understanding A365 fast | Showing **data-security / DLP** on an AI agent | A real, demoable Teams AI Teammate |
+| **Setup effort** | Minutes | Minutes + a Purview app & DLP policy | End-to-end onboarding (blueprint, deploy, publish, license) |
 
 ---
 
@@ -42,6 +41,8 @@ diagrams exactly how the agent proves who it is (token minting).
 
 - **Just want to see it work and understand A365?** → [`a365-agent-slim/`](a365-agent-slim/README.md).
   You'll be chatting with an observable agent in a few minutes.
+- **Want to see data-security / DLP govern an AI agent?** → [`a365-agent-purview/`](a365-agent-purview/README.md).
+  The slim demo plus a Microsoft Purview policy that blocks sensitive prompts inline.
 - **Want a real agent in Teams/Copilot, deployed to Azure?** → [`a365-agent-full/`](a365-agent-full/README.md).
   It has a complete, copy-paste [re-provision-from-scratch guide](a365-agent-full/README.md#7-re-provision-from-scratch-copypaste).
 
@@ -49,7 +50,7 @@ diagrams exactly how the agent proves who it is (token minting).
 
 ## Shared prerequisites
 
-Both samples need:
+All three samples need:
 
 - **Python 3.11+** and **[uv](https://docs.astral.sh/uv/)** (`python -m pip install uv`)
 - **Azure CLI** (`az`) — `winget install Microsoft.AzureCLI`
@@ -57,8 +58,10 @@ Both samples need:
 - An **Azure OpenAI / Foundry** resource with a model deployment
 - A tenant where you have **Global Administrator** (to grant the agent's permissions)
 
-The full sample additionally needs an **Azure subscription** (to run the container) and, to go live
-in Teams, a tenant enrolled in **Frontier** with an available **agent license**.
+The **purview** sample additionally needs **Microsoft 365 E5** + Purview **pay-as-you-go billing** and a
+DLP policy on the Application enforcement plane (see its README). The **full** sample additionally needs
+an **Azure subscription** (to run the container) and, to go live in Teams, a tenant enrolled in
+**Frontier** with an available **agent license**.
 
 Each sample ships a fully-commented **`.env.sample`** — copy it to `.env` and fill it in. Every
 variable is annotated with where it comes from (you / the `a365` CLI / Azure OpenAI) and what reads it.
@@ -69,11 +72,16 @@ variable is annotated with where it comes from (you / the `a365` CLI / Azure Ope
 
 ```
 microsoft/
-├─ README.md                ← you are here (overview of both samples)
+├─ README.md                ← you are here (overview of all three samples)
 ├─ a365-agent-slim/         ← the local demo (one script)
 │  ├─ agent.py              ← chat + observability
 │  ├─ refresh-mail-token.ps1← fetch a WorkIQ Mail token into .env
 │  ├─ .env.sample          ← annotated config template
+│  └─ README.md
+├─ a365-agent-purview/      ← the slim demo + Microsoft Purview DLP
+│  ├─ agent.py              ← chat + observability + Purview policy middleware
+│  ├─ refresh-mail-token.ps1
+│  ├─ .env.sample          ← annotated config template (+ PURVIEW_* keys)
 │  └─ README.md
 └─ a365-agent-full/         ← the real Teams AI Teammate
    ├─ backend/              ← the agent (runs in a container)
