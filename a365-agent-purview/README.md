@@ -171,6 +171,47 @@ unreachable or unlicensed the agent keeps chatting (logs a warning) instead of f
 
 ---
 
+## Two signal planes: observability vs. Purview risk
+
+This agent emits to **two independent planes**. Understanding the split matters, because a **blocked**
+prompt shows up in one and not the other:
+
+| Plane | Carried by | Identity it's keyed to | Where you see it |
+|---|---|---|---|
+| **A365 observability** | OpenTelemetry spans exported to A365 (`…/otlp/…/traces`) | the A365 blueprint / agentic id (`AGENT365_ACTIVITY_AGENT_ID`) | admin center → Agents → **Activity** |
+| **Purview data-security / risk** | the middleware's Graph `processContent` calls | the **Purview app** (`PURVIEW_CLIENT_APP_ID`; shown in Purview as `Entra - <appId>`) | Purview → **DSPM for AI** / **IRM** (Risky Agent) |
+
+Key consequences:
+
+- **When DLP blocks a prompt, the LLM never runs** (the middleware terminates first), so there are
+  **no genAI spans** to export — the exporter logs `No eligible genAI spans to export; nothing exported.`
+  That is expected, **not** a failure.
+- **The block is still recorded**: the middleware's `processContent` call (HTTP 200) sends the prompt +
+  the sensitive-info-type match + the DLP verdict to Purview. **That** is the signal that feeds
+  **DSPM for AI** and the **IRM `RiskyAgents`** policy — i.e. how the agent gets flagged as risky.
+- So the **Risky Agent** flag rides the **Purview plane** (the `Entra - <appId>` identity =
+  `a365-purview-dlp`), **not** the OTel observability export. The two planes are decoupled and use
+  different app identities by design. Seeing `Entra - <your PURVIEW_CLIENT_APP_ID>` in Purview is
+  correct. Risk/IRM views are batch-computed — allow a few hours.
+
+### Diagnosing the observability export (`A365_OBS_DEBUG`)
+
+The per-turn `📡 activity exported` line prints unconditionally and is **not** proof of success. To
+see what the A365 exporter actually did — eligible spans, the export URL, and the **HTTP status**
+(200 = shipped; 401/403 = the agent lacks the Observability `OtelWrite` grant; `No eligible genAI
+spans` = nothing produced) — set the env var:
+
+```powershell
+$env:A365_OBS_DEBUG="1"
+.venv\Scripts\python.exe agent.py -m "How many unread emails do I have?"
+$env:A365_OBS_DEBUG=""
+```
+
+A healthy export logs `HTTP 200 success …` with the A365 sinks (`flashpoint` / `sentinel` / `esp`)
+reporting `"status":"sent"`. The admin-center Activity view then lags 15–90 min behind that.
+
+---
+
 ## How this relates to the other samples
 
 - [`a365-agent-slim`](../a365-agent-slim) — the base (chat + Mail + observability).
