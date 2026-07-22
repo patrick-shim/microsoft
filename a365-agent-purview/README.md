@@ -33,7 +33,7 @@ Insider Risk, eDiscovery).
 ```
 
 The check is an Agent Framework **middleware** (`agent-framework-purview`, imports as
-`agent_framework.microsoft`). The wiring is one call in [`agent.py`](agent.py) —
+`agent_framework.microsoft`). The wiring is one call in [`agent_purview.py`](agent_purview.py) —
 `_build_purview_middleware()` builds a `PurviewPolicyMiddleware` and passes it to
 `client.as_agent(..., middleware=[...])`.
 
@@ -132,7 +132,7 @@ copy .env.sample .env
 # Fill: AZURE_OPENAI_* (gpt-5), PURVIEW_CLIENT_APP_ID = $appId, and the A365 observability values
 #       (reuse the a365-agent-slim blueprint, or provision your own).
 uv sync --link-mode=copy                 # --link-mode=copy avoids a OneDrive hardlink error
-.venv\Scripts\python.exe agent.py -m "My resident registration number is 900101-1234567."
+.venv\Scripts\python.exe agent_purview.py -m "My resident registration number is 900101-1234567."
 ```
 
 Start-up shows `🛡️ Purview DLP ON …`. The **first run opens a browser** to sign in to the Purview app;
@@ -203,7 +203,7 @@ spans` = nothing produced) — set the env var:
 
 ```powershell
 $env:A365_OBS_DEBUG="1"
-.venv\Scripts\python.exe agent.py -m "How many unread emails do I have?"
+.venv\Scripts\python.exe agent_purview.py -m "How many unread emails do I have?"
 $env:A365_OBS_DEBUG=""
 ```
 

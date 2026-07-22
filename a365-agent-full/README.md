@@ -79,7 +79,7 @@ speaks the real Teams protocol, and is onboarded to Microsoft 365 like any first
                               │            runs the agent, replies)      │
                               │                  │                       │
                               │                  ▼                       │
-                              │   agent.py  (MyAgent)                    │
+                              │   agent_full.py  (MyAgent)               │
                               │     ├─ Azure OpenAI (Agent Framework) ───┼──►  Foundry (gpt-5)
                               │     └─ WorkIQ MCP tools ─────────────────┼──►  Mail / Teams /
                               │                                          │     SharePoint / OneDrive
@@ -188,7 +188,7 @@ Everything runs from **`backend/`**. Read them in this order:
 |---|---|
 | **`start_with_generic_host.py`** | The entry point — imports `MyAgent` and calls `create_and_run_host(MyAgent)`. This is what the container runs. |
 | **`host_agent_server.py`** | The **hosting layer**. Builds the aiohttp web server, the Bot Framework adapter, the auth handlers, and the message/notification routing. **Owns observability**: initializes OpenTelemetry, exchanges the per-turn telemetry token, and wraps each turn in a "baggage" scope so spans are attributed to the agent. Exposes `/api/messages` (guarded by JWT) and `/api/health` (open). Binds `0.0.0.0` so the container's ingress can reach it. |
-| **`agent.py`** (`MyAgent`) | The **agent itself**. Creates the Azure OpenAI client (Agent Framework), attaches WorkIQ MCP tools, and answers each message. `process_user_message()` is the one turn. Also handles email notifications. The LLM logic lives here; the host never touches the model. |
+| **`agent_full.py`** (`MyAgent`) | The **agent itself**. Creates the Azure OpenAI client (Agent Framework), attaches WorkIQ MCP tools, and answers each message. `process_user_message()` is the one turn. Also handles email notifications. The LLM logic lives here; the host never touches the model. |
 | **`agent_interface.py`** | The tiny **contract** between host and agent (`initialize`, `process_user_message`, `cleanup`). The host talks to the agent only through this, so you could swap the LLM framework without touching the host. |
 | **`token_cache.py`** | A dictionary that stores the per-turn **observability token** so the telemetry exporter can read it back (`cache_agentic_token` / `get_cached_agentic_token`). |
 | **`pyproject.toml`** | The Python dependencies, pinned to a working set (Agent Framework 1.11 + A365 SDK 1.0 + the OpenTelemetry distro). Note `httpx>=0.28.1` is required. |
@@ -380,7 +380,7 @@ a365-agent-full/
 ├─ backend/                       ← the agent (runs in the container)
 │  ├─ start_with_generic_host.py  ← entry point
 │  ├─ host_agent_server.py        ← aiohttp host + auth + routing + observability (loads ../.env)
-│  ├─ agent.py                    ← MyAgent: Agent Framework (gpt-5) + WorkIQ tools
+│  ├─ agent_full.py               ← MyAgent: Agent Framework (gpt-5) + WorkIQ tools
 │  ├─ agent_interface.py          ← host⇄agent contract
 │  ├─ token_cache.py              ← per-turn observability token cache
 │  ├─ pyproject.toml · uv.lock    ← pinned dependencies

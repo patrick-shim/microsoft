@@ -11,7 +11,7 @@ dependencies = [
     # `agent_framework.openai.OpenAIChatClient(azure_endpoint=..., credential=...)`
     # is the verified Azure OpenAI path. `agent-framework-azure-ai` (the deprecated
     # Azure OpenAI client) is intentionally NOT used — its build drags in an
-    # incompatible core pin. See backend/agent.py `_create_chat_client`.
+    # incompatible core pin. See backend/agent_full.py `_create_chat_client`.
     "agent-framework==1.11.0",
     "agent-framework-core==1.11.0",
     "agent-framework-openai==1.10.1",

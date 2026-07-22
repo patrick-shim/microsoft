@@ -1,31 +1,26 @@
 #!/usr/bin/env python3
 # Copyright (c) Microsoft. All rights reserved.
 """
-agent.py — the a365-agent-slim demo + Microsoft Purview DLP on prompts.
+agent_slim.py — chat with the agent locally; every turn exports to the A365 Activity graph.
 
-This is the local "slim" agent (Azure OpenAI chat + WorkIQ Mail tool + Agent 365
-observability) with one addition: a **Microsoft Purview policy middleware** wired into the
-agent so that EVERY prompt is evaluated against the tenant's Purview Data Loss Prevention
-(DLP) policies. Sensitive content is blocked inline before it reaches the model, and the
-interaction is logged in Purview for Audit / Communication Compliance / Insider Risk /
-eDiscovery. (Response/output blocking isn't supported on the Purview Application enforcement
-plane that custom SDK apps register under, so this demo enforces DLP on prompts — see
-`PromptOnlyPurviewMiddleware` below.)
-
-The DLP wiring is `agent-framework-purview` (imports as `agent_framework.microsoft`): a
-`PurviewPolicyMiddleware` passed to `client.as_agent(..., middleware=[...])`. See
-`_build_purview_middleware()` below. Set `PURVIEW_CLIENT_APP_ID` in `.env` to enable it;
-without it the agent runs exactly like the slim demo (no DLP).
+A demo-friendly path that BYPASSES the Bot Framework hosting layer (which silently
+drops local/anonymous turns in this SDK build). It runs the real agent — Azure OpenAI,
+plus the WorkIQ Mail MCP tool when a bearer token is available — and emits a
+correctly-attributed InvokeAgent + inference activity per turn to Agent 365. So you get
+"the agent answers, and it's observable in A365" live, with no Teams / Playground.
 
 Usage (inside the project venv):
 
-    .venv/Scripts/python.exe agent.py                       # interactive chat (REPL)
-    .venv/Scripts/python.exe agent.py -m "Give me a tip"    # one turn, then exit
-    .venv/Scripts/python.exe agent.py --no-export           # chat only, skip A365 export
+    .venv/Scripts/python.exe agent_slim.py                       # interactive chat (REPL)
+    .venv/Scripts/python.exe agent_slim.py -m "Give me a tip"    # one turn, then exit
+    .venv/Scripts/python.exe agent_slim.py --no-export           # chat only, skip A365 export
 
 Mail tools: run  .\refresh-mail-token.ps1  first to put a token in .env (BEARER_TOKEN).
-Try the DLP block with a prompt like: "My card is 4111 1111 1111 1111." (needs a Purview
-Credit-Card DLP policy for "Microsoft 365 Copilot and AI apps"). See README.md for setup.
+Without it the agent still chats — just without M365 mail access.
+
+View the activities: M365 admin center -> Agents -> agent-obs-demo -> Activity, or
+Defender -> Advanced Hunting -> CloudAppEvents (filter AgentId == the agent id).
+Indexing lag is ~15-90 min.
 """
 
 from __future__ import annotations
@@ -67,16 +62,6 @@ from dotenv import load_dotenv
 from agent_framework import MCPStreamableHTTPTool
 from agent_framework.openai import OpenAIChatClient
 
-# --- Microsoft Purview DLP (prompt + response policy middleware) ---------------
-# agent-framework-purview evaluates every prompt AND response against the tenant's Purview
-# DLP policies (via Microsoft Graph dataSecurityAndGovernance) and blocks violations inline.
-from agent_framework.microsoft import PurviewPolicyMiddleware, PurviewSettings
-from azure.identity import (
-    AuthenticationRecord,
-    InteractiveBrowserCredential,
-    TokenCachePersistenceOptions,
-)
-
 # --- Agent 365 observability (OpenTelemetry distro + baggage propagation) ------
 from microsoft.opentelemetry import use_microsoft_opentelemetry
 from microsoft.opentelemetry.a365.core.middleware.baggage_builder import BaggageBuilder
@@ -94,15 +79,6 @@ DEFAULT_AGENT_ID = "d435d1c6-82a6-4773-9d3c-862e43f9c04e"
 # OAuth scopes for the S2S FMI token chain that authenticates the observability exporter.
 FMI_SCOPE = "api://AzureADTokenExchange/.default"
 OBSERVABILITY_SCOPE = "api://9b975845-388f-4429-889e-eab1ef63949c/.default"
-
-# The delegated Graph scope the Purview middleware acquires (see get_purview_scopes()).
-PURVIEW_GRAPH_SCOPE = "https://graph.microsoft.com/.default"
-# Where the one-time Purview sign-in's AuthenticationRecord is cached. This is an ACCOUNT
-# POINTER (home account id / username / tenant), NOT a token — the tokens live in the OS
-# credential store. Persisting it lets subsequent runs authenticate silently (no popup).
-PURVIEW_AUTH_RECORD_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), ".purview-auth-record.json"
-)
 
 AGENT_PROMPT = (
     "You are a helpful Microsoft 365 assistant with direct access to the user's mailbox via the "
@@ -143,12 +119,6 @@ class Config:
     # WorkIQ Mail MCP token (from refresh-mail-token.ps1); empty => tools disabled.
     bearer_token: str
 
-    # Microsoft Purview DLP: the Entra app (client id) that holds the Graph data-security
-    # permissions, the display name Purview logs under, and an optional explicit user id.
-    purview_client_app_id: str | None
-    purview_app_name: str
-    purview_user_id: str | None
-
 
 def load_config() -> Config:
     """Load `.env` from the project root and return the resolved Config."""
@@ -168,9 +138,6 @@ def load_config() -> Config:
         blueprint_client_secret=env("AGENT365OBSERVABILITY__CLIENTSECRET")
         or env("CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET"),
         bearer_token=env("BEARER_TOKEN") or "",
-        purview_client_app_id=env("PURVIEW_CLIENT_APP_ID"),
-        purview_app_name=(env("PURVIEW_APP_NAME") or "a365-agent-purview").strip('"'),
-        purview_user_id=env("PURVIEW_DEFAULT_USER_ID"),
     )
 
 
@@ -268,113 +235,8 @@ async def _connect_mail_tool(cfg: Config, stack: AsyncExitStack) -> MCPStreamabl
         return None
 
 
-class PromptOnlyPurviewMiddleware(PurviewPolicyMiddleware):
-    """Purview DLP middleware that evaluates PROMPTS only (skips the response post-check).
-
-    Response blocking (`downloadText`) is not supported on the Purview **Application**
-    enforcement plane — the plane custom SDK apps register under — so the built-in post-check
-    can never block. Worse, on a tool-augmented turn the assistant's final message carries no
-    plain text (it's a tool-call result), so Purview's /processContent rejects it with
-    HTTP 400 "TextContent.Data is null or empty", which the middleware logs as a scary
-    "Error in Purview policy post-check" even though nothing is wrong.
-
-    We short-circuit the `downloadText` evaluation (returns "not blocked") so only the prompt
-    (`uploadText`) is checked. Done by wrapping the processor rather than reimplementing the
-    pre-check, so it stays correct across `agent-framework-purview` versions. If/when response
-    blocking is supported on this plane, delete this class and use PurviewPolicyMiddleware.
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        _process = self._processor.process_messages
-
-        async def _prompt_only(messages, activity, **kw):
-            # Activity is a str-Enum; "downloadText" == the response check.
-            if getattr(activity, "value", activity) == "downloadText":
-                return False, kw.get("user_id")
-            return await _process(messages, activity, **kw)
-
-        self._processor.process_messages = _prompt_only  # type: ignore[method-assign]
-
-
-def _build_purview_credential(cfg: Config) -> InteractiveBrowserCredential:
-    """Build an InteractiveBrowserCredential that signs in ONCE, then stays silent.
-
-    Silent reuse across process restarts needs BOTH pieces:
-      1. a persistent token cache (TokenCachePersistenceOptions) — holds the refresh token
-         in the OS credential store (Windows DPAPI), and
-      2. an AuthenticationRecord — tells the credential WHICH cached account to look up.
-         Without it, azure-identity can't match the cache and pops the browser every run.
-
-    We persist the record to disk on the first sign-in and load it on every later run, so
-    only the very first invocation shows a browser. Delete `.purview-auth-record.json` (or
-    clear the 'a365-purview' cache) to force a fresh sign-in.
-    """
-    record: AuthenticationRecord | None = None
-    if os.path.exists(PURVIEW_AUTH_RECORD_PATH):
-        try:
-            with open(PURVIEW_AUTH_RECORD_PATH, encoding="utf-8") as f:
-                record = AuthenticationRecord.deserialize(f.read())
-        except Exception as e:  # corrupt/old record — fall back to a fresh sign-in
-            print(f"⚠️  Ignoring unreadable Purview auth record ({e}); will sign in again.")
-            record = None
-
-    credential = InteractiveBrowserCredential(
-        client_id=cfg.purview_client_app_id,
-        cache_persistence_options=TokenCachePersistenceOptions(name="a365-purview"),
-        authentication_record=record,
-    )
-
-    if record is None:
-        # First run (or the record was lost): perform the one interactive sign-in now and
-        # persist the resulting account record so future runs are silent.
-        record = credential.authenticate(scopes=[PURVIEW_GRAPH_SCOPE])
-        try:
-            with open(PURVIEW_AUTH_RECORD_PATH, "w", encoding="utf-8") as f:
-                f.write(record.serialize())
-        except Exception as e:
-            print(f"⚠️  Could not persist Purview auth record ({e}); you may be prompted again.")
-
-    return credential
-
-
-def _build_purview_middleware(cfg: Config) -> list:
-    """Create the Purview DLP policy middleware, or [] when Purview isn't configured.
-
-    The middleware evaluates every prompt and response against the tenant's Purview DLP
-    policies and blocks violations inline. Authentication uses InteractiveBrowserCredential
-    against the Purview app registration (PURVIEW_CLIENT_APP_ID) — the signed-in user's
-    delegated token carries the identity Purview evaluates policies for, so no explicit
-    user_id is needed. The app needs Graph delegated permissions (admin-consented):
-    ProtectionScopes.Compute.All, Content.Process.All, ContentActivity.Write.
-    """
-    if not cfg.purview_client_app_id:
-        print("ℹ️  No PURVIEW_CLIENT_APP_ID — Purview DLP disabled (chat runs unfiltered). "
-              "Set it in .env to enforce policies.")
-        return []
-
-    settings = PurviewSettings(
-        app_name=cfg.purview_app_name,
-        blocked_prompt_message="🛑 Your message was blocked by a Microsoft Purview data-loss-prevention policy.",
-        blocked_response_message="🛑 The response was blocked by a Microsoft Purview data-loss-prevention policy.",
-        # Don't fail a turn if Purview is unreachable / not licensed — log and continue.
-        ignore_exceptions=True,
-        ignore_payment_required=True,
-    )
-    # Sign in ONCE (browser), then reuse the cached token silently on every later run — this
-    # needs both a persistent cache AND a saved AuthenticationRecord (see the builder). For a
-    # fully headless / no-popup deployment, swap this for CertificateCredential (app-only) and
-    # pass user_id explicitly on each turn — see README.
-    credential = _build_purview_credential(cfg)
-    print(f"🛡️  Purview DLP ON (app '{cfg.purview_app_name}') — prompts are policy-checked. "
-          "A browser sign-in opens on the FIRST run only (token is then cached).")
-    # PromptOnly: the Application enforcement plane only supports blocking prompts (uploadText);
-    # skipping the response post-check avoids a spurious 400 on tool-call turns. See the class docstring.
-    return [PromptOnlyPurviewMiddleware(credential=credential, settings=settings)]
-
-
 async def build_agent(cfg: Config, stack: AsyncExitStack):
-    """Create the Azure OpenAI agent, wiring in the Mail tool + Purview DLP middleware."""
+    """Create the Azure OpenAI agent, wiring in the Mail tool when available."""
     client = OpenAIChatClient(
         azure_endpoint=cfg.endpoint,
         credential=AzureCliCredential(),  # Entra auth — no API key
@@ -385,18 +247,9 @@ async def build_agent(cfg: Config, stack: AsyncExitStack):
     mail = await _connect_mail_tool(cfg, stack)
     tools = [mail] if mail else []
 
-    # Purview DLP middleware — intercepts every prompt + response for policy evaluation.
-    middleware = _build_purview_middleware(cfg)
-
     # Stamp the A365 agent id so the framework's telemetry spans attribute to it
     # (otherwise it invents a per-turn GUID and the exporter can't group/authenticate).
-    return client.as_agent(
-        id=cfg.agent_id,
-        name=cfg.agent_name,
-        instructions=AGENT_PROMPT,
-        tools=tools,
-        middleware=middleware,
-    )
+    return client.as_agent(id=cfg.agent_id, name=cfg.agent_name, instructions=AGENT_PROMPT, tools=tools)
 
 
 # ── Chat turn ─────────────────────────────────────────────────────────────────

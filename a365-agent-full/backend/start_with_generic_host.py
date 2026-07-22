@@ -7,7 +7,7 @@ import sys
 
 def main() -> int:
     try:
-        from agent import MyAgent
+        from agent_full import MyAgent
         from host_agent_server import create_and_run_host
     except ImportError as e:
         print(f"Import error: {e}\nRun from the backend/ directory.")

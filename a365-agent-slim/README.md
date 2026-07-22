@@ -74,7 +74,7 @@ You type a message. Under the hood, each turn does four things:
                           │
                           ▼
    ┌──────────────────────────────────────────────────────────────┐
-   │  agent.py                                                     │
+   │  agent_slim.py                                                │
    │                                                              │
    │  1. Mint an observability token (FMI 3-hop chain) ──────────►│  Microsoft Entra ID
    │       so the agent is allowed to report telemetry            │  (login.microsoftonline.com)
@@ -150,7 +150,7 @@ a365 --version                                                    # check: e.g. 
 ```
 
 > **`az` vs `a365`** — two different tools. `az` signs you into the tenant; `a365` registers
-> and manages the agent. The demo itself (`agent.py`) calls **neither** at runtime.
+> and manages the agent. The demo itself (`agent_slim.py`) calls **neither** at runtime.
 
 ### 3.4 Entra roles (permissions on your account)
 
@@ -291,13 +291,13 @@ Skip this and the agent still chats — it just can't touch your mail.
 
 ```powershell
 # interactive — type messages; each turn prints "📡 activity exported to A365"
-.venv\Scripts\python.exe agent.py
+.venv\Scripts\python.exe agent_slim.py
 
 # one-shot (non-interactive)
-.venv\Scripts\python.exe agent.py -m "How many unread emails do I have?"
+.venv\Scripts\python.exe agent_slim.py -m "How many unread emails do I have?"
 
 # chat only, skip the A365 export
-.venv\Scripts\python.exe agent.py --no-export
+.venv\Scripts\python.exe agent_slim.py --no-export
 ```
 
 On start you'll see:
@@ -316,7 +316,7 @@ Good things to ask:
 
 ## 7. How the code is structured
 
-Everything lives in one file, **`agent.py`**, read top-to-bottom. Its sections:
+Everything lives in one file, **`agent_slim.py`**, read top-to-bottom. Its sections:
 
 | Section | What it does |
 |---|---|
@@ -372,7 +372,7 @@ View them:
 ## 10. Troubleshooting & notes
 
 - **Mail calls suddenly fail** → the bearer token expired (~1 hour). Re-run
-  `.\refresh-mail-token.ps1` and restart `agent.py`.
+  `.\refresh-mail-token.ps1` and restart `agent_slim.py`.
 - **`Could not enable observability` / token errors** → check `.env` has the Blueprint
   `CLIENTID` / `CLIENTSECRET` / `TENANTID` and that `AGENT365_ACTIVITY_AGENT_ID` is the
   **agentic app id** (not the Blueprint id).

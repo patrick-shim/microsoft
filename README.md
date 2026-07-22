@@ -74,12 +74,12 @@ variable is annotated with where it comes from (you / the `a365` CLI / Azure Ope
 microsoft/
 ├─ README.md                ← you are here (overview of all three samples)
 ├─ a365-agent-slim/         ← the local demo (one script)
-│  ├─ agent.py              ← chat + observability
+│  ├─ agent_slim.py         ← chat + observability
 │  ├─ refresh-mail-token.ps1← fetch a WorkIQ Mail token into .env
 │  ├─ .env.sample          ← annotated config template
 │  └─ README.md
 ├─ a365-agent-purview/      ← the slim demo + Microsoft Purview DLP
-│  ├─ agent.py              ← chat + observability + Purview policy middleware
+│  ├─ agent_purview.py      ← chat + observability + Purview policy middleware
 │  ├─ refresh-mail-token.ps1
 │  ├─ .env.sample          ← annotated config template (+ PURVIEW_* keys)
 │  └─ README.md
