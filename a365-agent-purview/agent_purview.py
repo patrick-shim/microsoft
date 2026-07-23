@@ -65,6 +65,7 @@ from dotenv import load_dotenv
 
 # --- Agent Framework (Azure OpenAI chat client + native MCP tool) -------------
 from agent_framework import MCPStreamableHTTPTool
+from agent_framework.exceptions import ChatClientContentFilterException
 from agent_framework.openai import OpenAIChatClient
 
 # --- Microsoft Purview DLP (prompt + response policy middleware) ---------------
@@ -402,23 +403,45 @@ async def build_agent(cfg: Config, stack: AsyncExitStack):
 # ── Chat turn ─────────────────────────────────────────────────────────────────
 
 
+# Shown when Azure OpenAI's content-safety filter blocks a prompt (harmful content / jailbreak).
+# This is a SEPARATE layer from Purview DLP: DLP blocks sensitive DATA in the prompt; the content
+# filter blocks unsafe REQUESTS at the model. Both end the turn with a 🛑, from different guards.
+CONTENT_FILTER_MSG = (
+    "🛑 This request was blocked by the Azure OpenAI content-safety filter "
+    "(harmful-content / jailbreak policy). The model never processed it."
+)
+
+
 async def run_turn(agent, cfg: Config, message: str, export: bool) -> str:
-    """Run one agent turn and return its text. When `export`, ship the activity to A365."""
-    if not export:
-        result = await agent.run(message)
+    """Run one agent turn and return its text. When `export`, ship the activity to A365.
+
+    A content-safety block is surfaced as a clean message, not an error. Two forms are caught:
+    the framework's ChatClientContentFilterException, and — because of an agent-framework-openai
+    bug — a ValueError. When Azure's Responses API returns the filter code "ContentFiltered"
+    (rather than "ResponsibleAIPolicyViolation"), the SDK throws `'ContentFiltered' is not a
+    valid ContentFilterCodes` WHILE building its own content-filter exception, so we catch that too.
+    """
+    try:
+        if not export:
+            result = await agent.run(message)
+        else:
+            # The baggage scope stamps the tenant/agent identity onto every span the turn
+            # produces, so the exporter can group and authenticate them.
+            with BaggageBuilder().tenant_id(cfg.tenant_id).agent_id(cfg.agent_id).build():
+                result = await agent.run(message)
+            # Flush now so the activity ships immediately (the batch processor would delay it).
+            provider = trace.get_tracer_provider()
+            if hasattr(provider, "force_flush"):
+                provider.force_flush()
+            print("   ↳ 📡 activity exported to A365")
         return str(getattr(result, "text", result))
-
-    # The baggage scope stamps the tenant/agent identity onto every span the turn
-    # produces, so the exporter can group and authenticate them.
-    with BaggageBuilder().tenant_id(cfg.tenant_id).agent_id(cfg.agent_id).build():
-        result = await agent.run(message)
-
-    # Flush now so the activity ships immediately (the batch processor would delay it).
-    provider = trace.get_tracer_provider()
-    if hasattr(provider, "force_flush"):
-        provider.force_flush()
-    print("   ↳ 📡 activity exported to A365")
-    return str(getattr(result, "text", result))
+    except ChatClientContentFilterException:
+        return CONTENT_FILTER_MSG
+    except ValueError as e:
+        # SDK bug: unknown Azure content-filter code (e.g. "ContentFiltered") -> enum ValueError.
+        if "ContentFilterCodes" in str(e):
+            return CONTENT_FILTER_MSG
+        raise
 
 
 # ── Session orchestration ─────────────────────────────────────────────────────
