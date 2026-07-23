@@ -269,6 +269,27 @@ async def _connect_mail_tool(cfg: Config, stack: AsyncExitStack) -> MCPStreamabl
         return None
 
 
+# When a prompt is blocked, PromptOnlyPurviewMiddleware records a short, traceable detail here
+# (action + correlation id); run_turn reads + resets it to append to the block message. NOTE the
+# inline processContent response does NOT include the rule/policy/SIT NAME — resolve the
+# correlation id in Purview Activity Explorer / Audit to see exactly which rule fired.
+_LAST_BLOCK: dict[str, str | None] = {"detail": None}
+
+
+def _dlp_action_is_block(act: object) -> bool:
+    """True if a Purview DlpActionInfo is a blocking action. Value-based (no private SDK import)."""
+    a = getattr(getattr(act, "action", None), "value", getattr(act, "action", None))
+    r = getattr(getattr(act, "restriction_action", None), "value", getattr(act, "restriction_action", None))
+    return a == "blockAccess" or r == "block"
+
+
+def _dlp_action_str(act: object) -> str:
+    """Human-readable one-liner for a DlpActionInfo (used by PURVIEW_DEBUG)."""
+    a = getattr(getattr(act, "action", None), "value", getattr(act, "action", None))
+    r = getattr(getattr(act, "restriction_action", None), "value", getattr(act, "restriction_action", None))
+    return f"action={a or '-'}/restriction={r or '-'}"
+
+
 class PromptOnlyPurviewMiddleware(PurviewPolicyMiddleware):
     """Purview DLP middleware that evaluates PROMPTS only (skips the response post-check).
 
@@ -296,6 +317,30 @@ class PromptOnlyPurviewMiddleware(PurviewPolicyMiddleware):
             return await _process(messages, activity, **kw)
 
         self._processor.process_messages = _prompt_only  # type: ignore[method-assign]
+
+        # Capture each prompt evaluation's outcome so a block can explain itself, and so
+        # PURVIEW_DEBUG=1 prints what Purview returned per prompt. The inline processContent
+        # response carries the ACTION + a correlation id only (NOT the rule/policy/SIT name —
+        # look those up in Activity Explorer / Audit by the correlation id).
+        _debug = bool(os.getenv("PURVIEW_DEBUG"))
+        _process_content = self._client.process_content
+
+        async def _capture(request):
+            resp = await _process_content(request)
+            actions = getattr(resp, "policy_actions", None) or []
+            cid = getattr(resp, "correlation_id", None) or getattr(request, "correlation_id", None)
+            blocked = any(_dlp_action_is_block(a) for a in actions)
+            if _debug:
+                acts = "; ".join(_dlp_action_str(a) for a in actions) or "none"
+                print(f"   🔎 Purview eval: blocked={blocked} · [{acts}] · "
+                      f"scopeState={getattr(resp, 'protection_scope_state', None)} · correlationId={cid}")
+            if blocked:
+                _LAST_BLOCK["detail"] = (
+                    f"Purview: app='{self._settings.get('app_name')}' · action=block · correlationId={cid}"
+                )
+            return resp
+
+        self._client.process_content = _capture  # type: ignore[method-assign]
 
 
 def _build_purview_credential(cfg: Config) -> InteractiveBrowserCredential:
@@ -420,7 +465,11 @@ async def run_turn(agent, cfg: Config, message: str, export: bool) -> str:
     bug — a ValueError. When Azure's Responses API returns the filter code "ContentFiltered"
     (rather than "ResponsibleAIPolicyViolation"), the SDK throws `'ContentFiltered' is not a
     valid ContentFilterCodes` WHILE building its own content-filter exception, so we catch that too.
+
+    If a Purview DLP policy blocked the prompt, the traceable detail captured by the middleware
+    (action + correlation id) is appended to the block message.
     """
+    _LAST_BLOCK["detail"] = None  # reset; the middleware sets it if this turn's prompt is blocked
     try:
         if not export:
             result = await agent.run(message)
@@ -434,7 +483,7 @@ async def run_turn(agent, cfg: Config, message: str, export: bool) -> str:
             if hasattr(provider, "force_flush"):
                 provider.force_flush()
             print("   ↳ 📡 activity exported to A365")
-        return str(getattr(result, "text", result))
+        text = str(getattr(result, "text", result))
     except ChatClientContentFilterException:
         return CONTENT_FILTER_MSG
     except ValueError as e:
@@ -442,6 +491,10 @@ async def run_turn(agent, cfg: Config, message: str, export: bool) -> str:
         if "ContentFilterCodes" in str(e):
             return CONTENT_FILTER_MSG
         raise
+    # A Purview DLP block: append the traceable detail (resolve the correlation id in Activity Explorer).
+    if _LAST_BLOCK["detail"]:
+        text += f"\n   ↳ {_LAST_BLOCK['detail']}"
+    return text
 
 
 # ── Session orchestration ─────────────────────────────────────────────────────

@@ -210,6 +210,36 @@ $env:A365_OBS_DEBUG=""
 A healthy export logs `HTTP 200 success …` with the A365 sinks (`flashpoint` / `sentinel` / `esp`)
 reporting `"status":"sent"`. The admin-center Activity view then lags 15–90 min behind that.
 
+### Understanding which policy fired (block detail + `PURVIEW_DEBUG`)
+
+When a prompt is blocked, the agent appends a **traceable detail** to the message:
+
+```
+🛑 Your message was blocked by a Microsoft Purview data-loss-prevention policy.
+   ↳ Purview: app='a365-purview-dlp' · action=block · correlationId=<guid>@AF
+```
+
+**Important:** Purview's inline `processContent` API returns only the **action** (`block`) and a
+**correlation id** — **not** the rule / policy / SIT *name*. To see exactly *which rule and which
+sensitive-info-type* fired, resolve that correlation id in **Purview → Data Loss Prevention →
+Activity explorer** (or **Audit**), filtered to the `a365-purview-dlp` app — the matching event
+lists the policy, rule, and SITs. DLP alerts (from the rule's `GenerateAlert`) name the rule directly.
+
+To see **what's effective vs. what isn't** across prompts, set `PURVIEW_DEBUG=1` — it prints *every*
+evaluation, including prompts that are **allowed**:
+
+```powershell
+$env:PURVIEW_DEBUG="1"
+.venv\Scripts\python.exe agent_purview.py -m "my amex is 3746-640358-02207"
+$env:PURVIEW_DEBUG=""
+```
+```
+🔎 Purview eval: blocked=True · [action=blockAccess/restriction=block] · scopeState=... · correlationId=...@AF
+```
+
+`blocked=False` on a prompt you *expected* to catch means your DLP policy/SIT didn't match it —
+tune the rule (SITs / thresholds / confidence) as in the [setup section](#3-create-the-dlp-policy--rule-security--compliance-powershell).
+
 ---
 
 ## How this relates to the other samples
